@@ -1,28 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-database.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Step-by-Step Backlog Prioritization</title>
+    <title>Collaborative Prioritization Tool</title>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <!-- Dragula for drag and drop -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.3/dragula.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.3/dragula.min.css"/>
+    
+    <!-- Custom styles -->
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-<div class="collaboration-header">
-    <div class="session-info">
-        <span>Session ID: <strong id="sessionId"></strong></span>
-        <button onclick="copySessionLink()" class="copy-link-btn">
-            Copy Session Link
-        </button>
-    </div>
-    <div class="active-users" id="activeUsers">
-        <!-- Active users will appear here -->
-    </div>
-</div>
+        <!-- Session Info -->
+        <div class="collaboration-header">
+            <div class="session-info">
+                <span>Session ID: <strong id="sessionId"></strong></span>
+                <button onclick="copySessionLink()" class="copy-link-btn">
+                    Copy Session Link
+                </button>
+            </div>
+            <div class="active-users" id="activeUsers"></div>
+        </div>
+
+        <!-- Step Indicator -->
         <div class="step-indicator">
             <div class="step-number active">1. Brainstorm</div>
             <div class="step-number">2. Business Value</div>
@@ -37,12 +44,12 @@
                 Add all possible items without worrying about their priority or effort.
             </div>
             <div class="input-group">
-                <input type="text" id="newItem" placeholder="Add a new item...">
+                <input type="text" id="newItem" placeholder="Add a new item..." autofocus>
                 <button onclick="addItem()">Add Item</button>
             </div>
-            <div id="itemsList"></div>
+            <div id="itemsList" class="items-container"></div>
             <div class="nav-buttons">
-                <button onclick="nextStep()" style="margin-left: auto">Next: Assess Business Value →</button>
+                <button onclick="nextStep()" class="next-btn">Next: Assess Business Value →</button>
             </div>
         </div>
 
@@ -52,15 +59,18 @@
             <div class="instructions">
                 Drag items to categorize them by business value. Compare items relative to each other.
             </div>
-            <div class="items-container">
+            <div class="columns-container">
                 <div class="column" id="unassignedValue">
                     <h3>Unassigned Items</h3>
+                    <div class="items-list"></div>
                 </div>
                 <div class="column" id="highValue">
                     <h3>High Business Value</h3>
+                    <div class="items-list"></div>
                 </div>
                 <div class="column" id="lowValue">
                     <h3>Low Business Value</h3>
+                    <div class="items-list"></div>
                 </div>
             </div>
             <div class="nav-buttons">
@@ -73,17 +83,20 @@
         <div class="step" id="step3">
             <h2>Step 3: Assess Implementation Effort</h2>
             <div class="instructions">
-                Drag items to categorize them by implementation effort required. Compare items relative to each other.
+                Drag items to categorize them by implementation effort required.
             </div>
-            <div class="items-container">
+            <div class="columns-container">
                 <div class="column" id="unassignedEffort">
                     <h3>Unassigned Items</h3>
+                    <div class="items-list"></div>
                 </div>
                 <div class="column" id="highEffort">
                     <h3>High Effort</h3>
+                    <div class="items-list"></div>
                 </div>
                 <div class="column" id="lowEffort">
                     <h3>Low Effort</h3>
+                    <div class="items-list"></div>
                 </div>
             </div>
             <div class="nav-buttons">
@@ -92,30 +105,32 @@
             </div>
         </div>
 
-        <!-- Step 4: Final Categories -->
+        <!-- Step 4: Final Matrix -->
         <div class="step" id="step4">
             <h2>Step 4: Final Categories</h2>
             <div class="instructions">
                 Review the final categorization based on your assessments.
             </div>
-            <div class="items-container">
-                <div class="column">
-                    <h3>Quick Wins</h3>
-                    <div id="quickWins"></div>
+            <div class="matrix-container">
+                <div class="matrix-row">
+                    <div class="matrix-cell">
+                        <h3>Quick Wins</h3>
+                        <div id="quickWins" class="items-list"></div>
+                    </div>
+                    <div class="matrix-cell">
+                        <h3>Strategic Projects</h3>
+                        <div id="strategic" class="items-list"></div>
+                    </div>
                 </div>
-                <div class="column">
-                    <h3>Strategic Projects</h3>
-                    <div id="strategic"></div>
-                </div>
-            </div>
-            <div class="items-container">
-                <div class="column">
-                    <h3>Fill-ins</h3>
-                    <div id="fillins"></div>
-                </div>
-                <div class="column">
-                    <h3>Time Sinks</h3>
-                    <div id="timeSinks"></div>
+                <div class="matrix-row">
+                    <div class="matrix-cell">
+                        <h3>Fill-ins</h3>
+                        <div id="fillins" class="items-list"></div>
+                    </div>
+                    <div class="matrix-cell">
+                        <h3>Time Sinks</h3>
+                        <div id="timeSinks" class="items-list"></div>
+                    </div>
                 </div>
             </div>
             <button onclick="exportData()" class="export-btn">Export to CSV</button>
@@ -125,6 +140,8 @@
             </div>
         </div>
     </div>
+
+    <!-- Custom JavaScript -->
     <script src="script.js"></script>
 </body>
 </html>

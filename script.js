@@ -1,3 +1,6 @@
+// Make db globally available
+let db;
+
 // Firebase Configuration and Initialization
 const firebaseConfig = {
     apiKey: "AIzaSyC_VSMqIXDaeEaVedPrjxCTm6ZYtWwkR68",
@@ -7,18 +10,19 @@ const firebaseConfig = {
     messagingSenderId: "277955967811",
     appId: "1:277955967811:web:eef30a3cc83aa104ba0df6",
     measurementId: "G-Z9RD172YPC",
-    databaseURL: "https://prioritize-7451e-default-rtdb.firebaseio.com" // Add this line
+    databaseURL: "https://prioritize-7451e-default-rtdb.firebaseio.com"
 };
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
-const dbRef = firebase.database().ref();
-dbRef.child('test').set({
-    timestamp: Date.now(),
-    message: 'Database connection successful'
-})
-.then(() => console.log('Database connected successfully'))
-.catch(error => console.error('Database connection failed:', error));
+db = firebase.database();
+
+// Test database connection
+console.log("Testing database connection...");
+const dbRef = db.ref();
+dbRef.child('test').get()
+    .then(() => console.log('Database connected successfully'))
+    .catch(error => console.error('Database connection error:', error));
 
 // Global Variables
 let currentStep = 1;

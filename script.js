@@ -1,3 +1,71 @@
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, set, onValue, runTransaction } from 'firebase/database';
+
+<script type="module">
+  // Import the functions you need from the SDKs you need
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js";
+  // TODO: Add SDKs for Firebase products that you want to use
+  // https://firebase.google.com/docs/web/setup#available-libraries
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyC_VSMqIXDaeEaVedPrjxCTm6ZYtWwkR68",
+    authDomain: "prioritize-7451e.firebaseapp.com",
+    projectId: "prioritize-7451e",
+    storageBucket: "prioritize-7451e.firebasestorage.app",
+    messagingSenderId: "277955967811",
+    appId: "1:277955967811:web:eef30a3cc83aa104ba0df6",
+    measurementId: "G-Z9RD172YPC"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// Generate or get session ID
+const sessionId = new URLSearchParams(window.location.search).get('session') || Date.now().toString(36);
+
+// Initialize all real-time features
+document.addEventListener('DOMContentLoaded', () => {
+    initializeLockManagement();
+    initializeRealtimeUpdates();
+    initializePresence();
+    
+    // Update URL with session ID if not present
+    if (!window.location.search.includes('session')) {
+        window.history.pushState({}, '', `?session=${sessionId}`);
+    }
+    
+    // Display session ID
+    document.getElementById('sessionId').textContent = sessionId;
+});
+
+  // Your web app's Firebase configuration
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+  const firebaseConfig = {
+    apiKey: "AIzaSyC_VSMqIXDaeEaVedPrjxCTm6ZYtWwkR68",
+    authDomain: "prioritize-7451e.firebaseapp.com",
+    projectId: "prioritize-7451e",
+    storageBucket: "prioritize-7451e.firebasestorage.app",
+    messagingSenderId: "277955967811",
+    appId: "1:277955967811:web:eef30a3cc83aa104ba0df6",
+    measurementId: "G-Z9RD172YPC"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+</script>
+
+
+
 // Conflict resolution and item locking system
 let lockedItems = {};
 let lastSyncTimestamp = Date.now();

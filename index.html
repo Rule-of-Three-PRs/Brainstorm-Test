@@ -1,0 +1,13 @@
+# If you've never used git with GitHub before, first set up your credentials:
+git config --global user.name "Your Name"
+git config --global user.email "your@email.com"
+
+# Then, in your terminal/command prompt, navigate to where your HTML file is and:
+git init
+git add prioritization.html
+# Rename it to index.html (GitHub Pages looks for this by default)
+mv prioritization.html index.html
+git commit -m "Initial commit"
+git branch -M main
+git remote add origin https://github.com/YOUR-USERNAME/backlog-prioritizer.git
+git push -u origin main

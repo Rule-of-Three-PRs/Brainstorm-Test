@@ -1,43 +1,28 @@
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, onValue, runTransaction } from 'firebase/database';
-
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
+// Firebase Configuration and Initialization
+const firebaseConfig = {
     apiKey: "AIzaSyC_VSMqIXDaeEaVedPrjxCTm6ZYtWwkR68",
     authDomain: "prioritize-7451e.firebaseapp.com",
     projectId: "prioritize-7451e",
     storageBucket: "prioritize-7451e.firebasestorage.app",
     messagingSenderId: "277955967811",
     appId: "1:277955967811:web:eef30a3cc83aa104ba0df6",
-    measurementId: "G-Z9RD172YPC"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
+    measurementId: "G-Z9RD172YPC",
+    databaseURL: "https://prioritize-7451e-default-rtdb.firebaseio.com" // Add this line
+};
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-// Generate or get session ID
+// Global Variables
+let currentStep = 1;
+let items = [];
+let userName = localStorage.getItem('userName');
+const userId = localStorage.getItem('userId') || generateUserId();
 const sessionId = new URLSearchParams(window.location.search).get('session') || Date.now().toString(36);
 
-// Initialize all real-time features
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    initializeLockManagement();
-    initializeRealtimeUpdates();
-    initializePresence();
-    
     // Update URL with session ID if not present
     if (!window.location.search.includes('session')) {
         window.history.pushState({}, '', `?session=${sessionId}`);
@@ -45,239 +30,350 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Display session ID
     document.getElementById('sessionId').textContent = sessionId;
+    
+    // Get username if not set
+    if (!userName) {
+        userName = prompt('Enter your name for collaboration:') || 'Anonymous User';
+        localStorage.setItem('userName', userName);
+        localStorage.setItem('userId', userId);
+    }
+
+    // Initialize Firebase listeners
+    initializeRealtimeUpdates();
+    initializePresence();
+    
+    // Initialize Dragula for drag and drop
+    initializeDragAndDrop();
+    
+    // Add enter key listener for new items
+    document.getElementById('newItem').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            addItem();
+        }
+    });
 });
 
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyC_VSMqIXDaeEaVedPrjxCTm6ZYtWwkR68",
-    authDomain: "prioritize-7451e.firebaseapp.com",
-    projectId: "prioritize-7451e",
-    storageBucket: "prioritize-7451e.firebasestorage.app",
-    messagingSenderId: "277955967811",
-    appId: "1:277955967811:web:eef30a3cc83aa104ba0df6",
-    measurementId: "G-Z9RD172YPC"
-  };
+// Initialize real-time updates
+function initializeRealtimeUpdates() {
+    const itemsRef = db.ref(`sessions/${sessionId}/items`);
+    const categoriesRef = db.ref(`sessions/${sessionId}/categories`);
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
-
-
-
-// Conflict resolution and item locking system
-let lockedItems = {};
-let lastSyncTimestamp = Date.now();
-const LOCK_TIMEOUT = 30000; // 30 seconds
-
-// Initialize lock management
-function initializeLockManagement() {
-    const locksRef = ref(db, `sessions/${sessionId}/locks`);
-    
-    // Listen for lock changes
-    onValue(locksRef, (snapshot) => {
-        lockedItems = snapshot.val() || {};
-        updateLockedItemsDisplay();
+    // Listen for items changes
+    itemsRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            items = Object.values(data);
+            updateItemsDisplay();
+        }
     });
 
-    // Clean up expired locks periodically
-    setInterval(cleanExpiredLocks, 5000);
+    // Listen for category changes
+    categoriesRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+            updateCategoriesDisplay(data);
+        }
+    });
 }
 
-// Lock an item before editing
-async function lockItem(itemId) {
-    const lockRef = ref(db, `sessions/${sessionId}/locks/${itemId}`);
-    const currentTime = Date.now();
+// Initialize user presence
+function initializePresence() {
+    const presenceRef = db.ref(`sessions/${sessionId}/users/${userId}`);
+    const userInfo = {
+        name: userName,
+        lastSeen: firebase.database.ServerValue.TIMESTAMP,
+        active: true
+    };
 
-    try {
-        // Try to acquire lock using transaction
-        const result = await runTransaction(lockRef, (currentLock) => {
-            if (currentLock === null || 
-                currentLock.timestamp + LOCK_TIMEOUT < currentTime ||
-                currentLock.userId === userId) {
-                return {
-                    userId: userId,
-                    userName: userName,
-                    timestamp: currentTime
-                };
-            }
-            // Abort if locked by someone else
-            return undefined;
+    // Update presence when user connects/disconnects
+    db.ref('.info/connected').on('value', (snapshot) => {
+        if (snapshot.val() === true) {
+            // Remove user data when they disconnect
+            presenceRef.onDisconnect().remove();
+            presenceRef.set(userInfo);
+        }
+    });
+
+    // Listen for other users
+    db.ref(`sessions/${sessionId}/users`).on('value', (snapshot) => {
+        updateActiveUsers(snapshot.val());
+    });
+}
+
+// Initialize drag and drop
+function initializeDragAndDrop() {
+    // Step 2: Business Value categorization
+    dragula([
+        document.querySelector('#unassignedValue .items-list'),
+        document.querySelector('#highValue .items-list'),
+        document.querySelector('#lowValue .items-list')
+    ]).on('drop', (el, target) => {
+        updateItemCategory(el.dataset.id, target.parentElement.id);
+    });
+
+    // Step 3: Implementation Effort categorization
+    dragula([
+        document.querySelector('#unassignedEffort .items-list'),
+        document.querySelector('#highEffort .items-list'),
+        document.querySelector('#lowEffort .items-list')
+    ]).on('drop', (el, target) => {
+        updateItemCategory(el.dataset.id, target.parentElement.id);
+    });
+}
+
+// Utility Functions
+function generateUserId() {
+    return 'user-' + Math.random().toString(36).substr(2, 9);
+}
+
+function updateActiveUsers(users) {
+    const activeUsersEl = document.getElementById('activeUsers');
+    activeUsersEl.innerHTML = '';
+    
+    if (users) {
+        Object.entries(users).forEach(([id, user]) => {
+            const avatarEl = document.createElement('div');
+            avatarEl.className = 'user-avatar';
+            avatarEl.title = user.name;
+            avatarEl.textContent = user.name.charAt(0).toUpperCase();
+            activeUsersEl.appendChild(avatarEl);
         });
+    }
+}
+// Item Management Functions
+function addItem() {
+    const input = document.getElementById('newItem');
+    const text = input.value.trim();
+    
+    if (text) {
+        const newItem = {
+            id: Date.now().toString(),
+            text: text,
+            createdBy: userName,
+            timestamp: firebase.database.ServerValue.TIMESTAMP,
+            value: null,
+            effort: null
+        };
 
-        if (result.committed) {
-            // Lock acquired
-            showNotification(`You've locked "${getItemText(itemId)}" for editing`);
-            return true;
+        // Save to Firebase
+        db.ref(`sessions/${sessionId}/items/${newItem.id}`).set(newItem);
+        
+        input.value = '';
+    }
+}
+
+function updateItemCategory(itemId, category) {
+    const categoryType = category.includes('Value') ? 'value' : 'effort';
+    const categoryValue = category.includes('high') ? 'high' : 'low';
+    
+    db.ref(`sessions/${sessionId}/items/${itemId}/${categoryType}`).set(categoryValue)
+        .then(() => {
+            if (currentStep === 4) {
+                updateMatrix();
+            }
+        });
+}
+
+function updateItemsDisplay() {
+    // Update items in current step
+    switch(currentStep) {
+        case 1:
+            displayItemsInList();
+            break;
+        case 2:
+            displayItemsInValueCategories();
+            break;
+        case 3:
+            displayItemsInEffortCategories();
+            break;
+        case 4:
+            updateMatrix();
+            break;
+    }
+}
+
+// Navigation Functions
+function nextStep() {
+    if (currentStep < 4) {
+        document.querySelector(`#step${currentStep}`).classList.remove('active');
+        document.querySelector(`#step${currentStep + 1}`).classList.add('active');
+        
+        // Update step indicators
+        document.querySelectorAll('.step-number')[currentStep - 1].classList.remove('active');
+        document.querySelectorAll('.step-number')[currentStep - 1].classList.add('completed');
+        document.querySelectorAll('.step-number')[currentStep].classList.add('active');
+        
+        currentStep++;
+        updateItemsDisplay();
+    }
+}
+
+function previousStep() {
+    if (currentStep > 1) {
+        document.querySelector(`#step${currentStep}`).classList.remove('active');
+        document.querySelector(`#step${currentStep - 1}`).classList.add('active');
+        
+        // Update step indicators
+        document.querySelectorAll('.step-number')[currentStep - 1].classList.remove('active');
+        document.querySelectorAll('.step-number')[currentStep - 2].classList.remove('completed');
+        document.querySelectorAll('.step-number')[currentStep - 2].classList.add('active');
+        
+        currentStep--;
+        updateItemsDisplay();
+    }
+}
+
+// Display Functions
+function displayItemsInList() {
+    const container = document.getElementById('itemsList');
+    container.innerHTML = '';
+    
+    items.forEach(item => {
+        const div = createItemElement(item);
+        container.appendChild(div);
+    });
+}
+
+function displayItemsInValueCategories() {
+    const unassigned = document.querySelector('#unassignedValue .items-list');
+    const high = document.querySelector('#highValue .items-list');
+    const low = document.querySelector('#lowValue .items-list');
+    
+    [unassigned, high, low].forEach(el => el.innerHTML = '');
+    
+    items.forEach(item => {
+        const div = createItemElement(item);
+        if (!item.value) {
+            unassigned.appendChild(div);
+        } else if (item.value === 'high') {
+            high.appendChild(div);
         } else {
-            // Lock failed
-            const currentLock = result.snapshot.val();
-            showNotification(`Item is being edited by ${currentLock.userName}`);
-            return false;
-        }
-    } catch (error) {
-        console.error('Lock acquisition failed:', error);
-        return false;
-    }
-}
-
-// Release a lock
-async function unlockItem(itemId) {
-    const lockRef = ref(db, `sessions/${sessionId}/locks/${itemId}`);
-    
-    try {
-        // Only remove if it's our lock
-        await runTransaction(lockRef, (currentLock) => {
-            if (currentLock && currentLock.userId === userId) {
-                return null;
-            }
-            return currentLock;
-        });
-        
-        showNotification(`Released lock on "${getItemText(itemId)}"`);
-    } catch (error) {
-        console.error('Lock release failed:', error);
-    }
-}
-
-// Clean up expired locks
-async function cleanExpiredLocks() {
-    const locksRef = ref(db, `sessions/${sessionId}/locks`);
-    const currentTime = Date.now();
-
-    try {
-        const snapshot = await get(locksRef);
-        const locks = snapshot.val() || {};
-
-        for (const [itemId, lock] of Object.entries(locks)) {
-            if (lock.timestamp + LOCK_TIMEOUT < currentTime) {
-                // Remove expired lock
-                await set(ref(db, `sessions/${sessionId}/locks/${itemId}`), null);
-            }
-        }
-    } catch (error) {
-        console.error('Lock cleanup failed:', error);
-    }
-}
-
-// Conflict resolution for simultaneous edits
-function resolveConflict(itemId, localChanges, remoteChanges) {
-    const conflictRef = ref(db, `sessions/${sessionId}/conflicts/${itemId}`);
-    
-    // Store both versions
-    set(conflictRef, {
-        local: {
-            userId: userId,
-            userName: userName,
-            changes: localChanges,
-            timestamp: Date.now()
-        },
-        remote: remoteChanges
-    });
-
-    // Show conflict resolution dialog
-    showConflictDialog(itemId, localChanges, remoteChanges);
-}
-
-// Update items with conflict checking
-async function updateItem(itemId, newData) {
-    const itemRef = ref(db, `sessions/${sessionId}/items/${itemId}`);
-    
-    try {
-        // Get the latest version first
-        const snapshot = await get(itemRef);
-        const currentData = snapshot.val();
-
-        if (currentData.lastModified > lastSyncTimestamp) {
-            // Conflict detected
-            resolveConflict(itemId, newData, currentData);
-            return false;
-        }
-
-        // No conflict, update the item
-        await set(itemRef, {
-            ...newData,
-            lastModified: Date.now()
-        });
-        
-        lastSyncTimestamp = Date.now();
-        return true;
-    } catch (error) {
-        console.error('Update failed:', error);
-        return false;
-    }
-}
-
-// Modify drag and drop to respect locks
-drake2.on('drag', (el) => {
-    const itemId = el.dataset.id;
-    
-    if (isItemLocked(itemId)) {
-        drake2.cancel(true);
-        showNotification(`Can't move - item is being edited by ${lockedItems[itemId].userName}`);
-    }
-});
-
-// Update UI to show locked items
-function updateLockedItemsDisplay() {
-    document.querySelectorAll('.item').forEach(item => {
-        const itemId = item.dataset.id;
-        const lockInfo = lockedItems[itemId];
-        
-        item.classList.remove('locked', 'locked-by-me');
-        item.querySelector('.lock-indicator')?.remove();
-
-        if (lockInfo) {
-            const isMyLock = lockInfo.userId === userId;
-            item.classList.add(isMyLock ? 'locked-by-me' : 'locked');
-            
-            const lockIndicator = document.createElement('div');
-            lockIndicator.className = 'lock-indicator';
-            lockIndicator.title = isMyLock ? 
-                'Locked by you' : 
-                `Locked by ${lockInfo.userName}`;
-            
-            item.appendChild(lockIndicator);
+            low.appendChild(div);
         }
     });
 }
 
-// Add these CSS styles
-const styles = `
-    .item.locked {
-        opacity: 0.7;
-        cursor: not-allowed;
-    }
+function displayItemsInEffortCategories() {
+    const unassigned = document.querySelector('#unassignedEffort .items-list');
+    const high = document.querySelector('#highEffort .items-list');
+    const low = document.querySelector('#lowEffort .items-list');
+    
+    [unassigned, high, low].forEach(el => el.innerHTML = '');
+    
+    items.forEach(item => {
+        const div = createItemElement(item);
+        if (!item.effort) {
+            unassigned.appendChild(div);
+        } else if (item.effort === 'high') {
+            high.appendChild(div);
+        } else {
+            low.appendChild(div);
+        }
+    });
+}
 
-    .item.locked-by-me {
-        border: 2px solid #4caf50;
-    }
+function updateMatrix() {
+    // Clear all quadrants
+    ['quickWins', 'strategic', 'fillins', 'timeSinks'].forEach(id => {
+        document.getElementById(id).innerHTML = '';
+    });
+    
+    // Categorize items into quadrants
+    items.forEach(item => {
+        if (item.value && item.effort) {
+            const div = createItemElement(item);
+            let quadrant;
+            
+            if (item.value === 'high' && item.effort === 'low') {
+                quadrant = 'quickWins';
+            } else if (item.value === 'high' && item.effort === 'high') {
+                quadrant = 'strategic';
+            } else if (item.value === 'low' && item.effort === 'low') {
+                quadrant = 'fillins';
+            } else {
+                quadrant = 'timeSinks';
+            }
+            
+            document.getElementById(quadrant).appendChild(div);
+        }
+    });
+}
 
-    .lock-indicator {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 16px;
-        height: 16px;
-        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23666" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>');
-    }
+function createItemElement(item) {
+    const div = document.createElement('div');
+    div.className = 'item fade-in';
+    div.dataset.id = item.id;
+    div.innerHTML = `
+        <span class="item-text">${item.text}</span>
+        <span class="item-meta">Added by ${item.createdBy}</span>
+    `;
+    return div;
+}
 
-    .conflict-dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: white;
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        z-index: 1000;
+// Export Function
+function exportData() {
+    let csv = 'Category,Item,Added By\n';
+    
+    function processQuadrant(id, name) {
+        const items = document.getElementById(id).getElementsByClassName('item');
+        Array.from(items).forEach(item => {
+            const text = item.querySelector('.item-text').textContent;
+            const addedBy = item.querySelector('.item-meta').textContent.replace('Added by ', '');
+            csv += `"${name}","${text}","${addedBy}"\n`;
+        });
     }
+    
+    processQuadrant('quickWins', 'Quick Wins');
+    processQuadrant('strategic', 'Strategic Projects');
+    processQuadrant('fillins', 'Fill-ins');
+    processQuadrant('timeSinks', 'Time Sinks');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.setAttribute('hidden', '');
+    a.setAttribute('href', url);
+    a.setAttribute('download', `prioritization-${sessionId}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
 
-    .conflict-dialog .options {
-        display: flex;
-        gap: 10px;
-        margin-top: 15px;
+// Copy Session Link Function
+function copySessionLink() {
+    const currentUrl = window.location.href;
+    navigator.clipboard.writeText(currentUrl)
+        .then(() => {
+            const button = document.querySelector('.copy-link-btn');
+            const originalText = button.textContent;
+            button.textContent = 'Copied!';
+            button.style.backgroundColor = '#28a745';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.backgroundColor = '#0066cc';
+            }, 2000);
+        })
+        .catch(err => {
+            console.error('Failed to copy link:', err);
+            alert('Failed to copy link. Please copy the URL manually.');
+        });
+}
+
+// Reset Function
+function resetTool() {
+    if (confirm('Are you sure you want to reset? All items will be cleared.')) {
+        db.ref(`sessions/${sessionId}/items`).remove()
+            .then(() => {
+                items = [];
+                currentStep = 1;
+                document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+                document.getElementById('step1').classList.add('active');
+                document.querySelectorAll('.step-number').forEach(indicator => {
+                    indicator.classList.remove('active', 'completed');
+                });
+                document.querySelectorAll('.step-number')[0].classList.add('active');
+                updateItemsDisplay();
+            });
     }
-`;
+}

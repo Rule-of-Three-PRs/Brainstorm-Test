@@ -47,3 +47,12 @@
     background: #4caf50;
     border: 2px solid white;
 }
+.collaboration-header {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}

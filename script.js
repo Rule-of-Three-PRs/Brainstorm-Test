@@ -1,25 +1,61 @@
-let currentStep = 1;
-let items = [];
+// ... (keep existing code and modify these functions) ...
 
-// Initialize dragula for each step
-const drake2 = dragula([
-    document.getElementById('unassignedValue'),
-    document.getElementById('highValue'),
-    document.getElementById('lowValue')
-]);
-
-const drake3 = dragula([
-    document.getElementById('unassignedEffort'),
-    document.getElementById('highEffort'),
-    document.getElementById('lowEffort')
-]);
-
-// Handle enter key in input
-document.getElementById('newItem').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        addItem();
+function nextStep() {
+    if (currentStep < 4) {
+        const currentStepElement = document.querySelector(`#step${currentStep}`);
+        const nextStepElement = document.querySelector(`#step${currentStep + 1}`);
+        
+        // Animate current step out
+        currentStepElement.classList.add('exit');
+        
+        setTimeout(() => {
+            currentStepElement.classList.remove('active', 'exit');
+            nextStepElement.classList.add('active');
+            
+            // Update step indicators with animation
+            const currentIndicator = document.querySelectorAll('.step-number')[currentStep - 1];
+            const nextIndicator = document.querySelectorAll('.step-number')[currentStep];
+            
+            currentIndicator.classList.remove('active');
+            currentIndicator.classList.add('completed');
+            nextIndicator.classList.add('active');
+            
+            currentStep++;
+            
+            if (currentStep === 4) {
+                setTimeout(() => {
+                    document.querySelector('.matrix-container').classList.add('visible');
+                }, 100);
+                categorizeItems();
+            }
+        }, 400); // Match this with CSS animation duration
     }
-});
+}
+
+function previousStep() {
+    if (currentStep > 1) {
+        const currentStepElement = document.querySelector(`#step${currentStep}`);
+        const previousStepElement = document.querySelector(`#step${currentStep - 1}`);
+        
+        // Animate current step out
+        currentStepElement.classList.add('exit');
+        
+        setTimeout(() => {
+            currentStepElement.classList.remove('active', 'exit');
+            previousStepElement.classList.add('active');
+            
+            // Update step indicators with animation
+            const currentIndicator = document.querySelectorAll('.step-number')[currentStep - 1];
+            const previousIndicator = document.querySelectorAll('.step-number')[currentStep - 2];
+            
+            currentIndicator.classList.remove('active');
+            previousIndicator.classList.remove('completed');
+            previousIndicator.classList.add('active');
+            
+            currentStep--;
+        }, 400); // Match this with CSS animation duration
+    }
+}
 
 function addItem() {
     const input = document.getElementById('newItem');
@@ -34,138 +70,48 @@ function addItem() {
         };
         items.push(item);
         
+        // Create item with animation
         const div = document.createElement('div');
         div.className = 'item';
         div.textContent = text;
         div.dataset.id = item.id;
+        div.style.opacity = '0';
         
         document.getElementById('itemsList').appendChild(div);
+        // Trigger reflow for animation
+        div.offsetHeight;
+        div.style.opacity = '1';
+        
         input.value = '';
         
-        // Also add to unassigned columns for next steps
+        // Clone for other columns
         const valueClone = div.cloneNode(true);
-        document.getElementById('unassignedValue').appendChild(valueClone);
-        
         const effortClone = div.cloneNode(true);
+        
+        document.getElementById('unassignedValue').appendChild(valueClone);
         document.getElementById('unassignedEffort').appendChild(effortClone);
     }
 }
 
-function nextStep() {
-    if (currentStep < 4) {
-        document.querySelector(`#step${currentStep}`).classList.remove('active');
-        document.querySelector(`#step${currentStep + 1}`).classList.add('active');
-        
-        // Update step indicators
-        document.querySelectorAll('.step-number')[currentStep - 1].classList.remove('active');
-        document.querySelectorAll('.step-number')[currentStep - 1].classList.add('completed');
-        document.querySelectorAll('.step-number')[currentStep].classList.add('active');
-        
-        currentStep++;
-        
-        if (currentStep === 4) {
-            categorizeItems();
-        }
-    }
-}
+// Add this to enhance drag and drop animations
+drake2.on('shadow', (el) => {
+    el.classList.add('is-dragging');
+});
 
-function previousStep() {
-    if (currentStep > 1) {
-        document.querySelector(`#step${currentStep}`).classList.remove('active');
-        document.querySelector(`#step${currentStep - 1}`).classList.add('active');
-        
-        // Update step indicators
-        document.querySelectorAll('.step-number')[currentStep - 1].classList.remove('active');
-        document.querySelectorAll('.step-number')[currentStep - 2].classList.remove('completed');
-        document.querySelectorAll('.step-number')[currentStep - 2].classList.add('active');
-        
-        currentStep--;
-    }
-}
-
-function categorizeItems() {
-    // Clear previous categorizations
-    document.getElementById('quickWins').innerHTML = '';
-    document.getElementById('strategic').innerHTML = '';
-    document.getElementById('fillins').innerHTML = '';
-    document.getElementById('timeSinks').innerHTML = '';
-    
-    // Get current categorizations
-    const highValue = document.getElementById('highValue').getElementsByClassName('item');
-    const lowValue = document.getElementById('lowValue').getElementsByClassName('item');
-    const highEffort = document.getElementById('highEffort').getElementsByClassName('item');
-    const lowEffort = document.getElementById('lowEffort').getElementsByClassName('item');
-    
-    // Create sets for easy lookup
-    const highValueSet = new Set(Array.from(highValue).map(el => el.dataset.id));
-    const lowValueSet = new Set(Array.from(lowValue).map(el => el.dataset.id));
-    const highEffortSet = new Set(Array.from(highEffort).map(el => el.dataset.id));
-    const lowEffortSet = new Set(Array.from(lowEffort).map(el => el.dataset.id));
-    
-    // Categorize all items
-    items.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'item';
-        div.textContent = item.text;
-        div.dataset.id = item.id;
-        
-        if (highValueSet.has(item.id.toString()) && lowEffortSet.has(item.id.toString())) {
-            document.getElementById('quickWins').appendChild(div);
-        } else if (highValueSet.has(item.id.toString()) && highEffortSet.has(item.id.toString())) {
-            document.getElementById('strategic').appendChild(div);
-        } else if (lowValueSet.has(item.id.toString()) && lowEffortSet.has(item.id.toString())) {
-            document.getElementById('fillins').appendChild(div);
-        } else if (lowValueSet.has(item.id.toString()) && highEffortSet.has(item.id.toString())) {
-            document.getElementById('timeSinks').appendChild(div);
-        }
+drake2.on('dragend', (el) => {
+    el.classList.remove('is-dragging');
+    document.querySelectorAll('.column').forEach(col => {
+        col.classList.remove('drag-over');
     });
-}
+});
 
-function exportData() {
-    let csv = 'Category,Item\n';
-    
-    function processQuadrant(id, name) {
-        const items = document.getElementById(id).getElementsByClassName('item');
-        Array.from(items).forEach(item => {
-            csv += `"${name}","${item.textContent}"\n`;
-        });
-    }
-    
-    processQuadrant('quickWins', 'Quick Wins');
-    processQuadrant('strategic', 'Strategic Projects');
-    processQuadrant('fillins', 'Fill-ins');
-    processQuadrant('timeSinks', 'Time Sinks');
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('hidden', '');
-    a.setAttribute('href', url);
-    a.setAttribute('download', 'prioritization-results.csv');
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-}
+drake3.on('shadow', (el) => {
+    el.classList.add('is-dragging');
+});
 
-function resetTool() {
-    // Reset all variables and clear all containers
-    items = [];
-    currentStep = 1;
-    
-    // Clear all containers
-    ['itemsList', 'unassignedValue', 'highValue', 'lowValue', 
-     'unassignedEffort', 'highEffort', 'lowEffort',
-     'quickWins', 'strategic', 'fillins', 'timeSinks'].forEach(id => {
-        document.getElementById(id).innerHTML = '';
+drake3.on('dragend', (el) => {
+    el.classList.remove('is-dragging');
+    document.querySelectorAll('.column').forEach(col => {
+        col.classList.remove('drag-over');
     });
-    
-    // Reset steps
-    document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
-    document.getElementById('step1').classList.add('active');
-    
-    // Reset step indicators
-    document.querySelectorAll('.step-number').forEach(indicator => {
-        indicator.classList.remove('active', 'completed');
-    });
-    document.querySelectorAll('.step-number')[0].classList.add('active');
-}
+});

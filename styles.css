@@ -1,0 +1,132 @@
+/* ... (keep previous CSS and add these new animation styles) ... */
+
+/* Step transitions */
+.step {
+    display: none;
+    opacity: 0;
+    transform: translateX(20px);
+    transition: opacity 0.4s ease-in-out, transform 0.4s ease-in-out;
+}
+
+.step.active {
+    display: block;
+    animation: slideIn 0.4s ease-in-out forwards;
+}
+
+.step.exit {
+    animation: slideOut 0.4s ease-in-out forwards;
+}
+
+@keyframes slideIn {
+    0% {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideOut {
+    0% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+}
+
+/* Step indicator animations */
+.step-number {
+    transition: all 0.3s ease-in-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.step-number.completed::after {
+    content: '✓';
+    position: absolute;
+    right: 10px;
+    animation: checkmark 0.5s ease-in-out forwards;
+}
+
+@keyframes checkmark {
+    0% {
+        opacity: 0;
+        transform: scale(0);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Item animations */
+.item {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Matrix quadrant animations */
+.matrix-container {
+    opacity: 0;
+    transform: scale(0.95);
+}
+
+.matrix-container.visible {
+    animation: scaleIn 0.5s ease-in-out forwards;
+}
+
+@keyframes scaleIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Drag and drop animations */
+.gu-mirror {
+    animation: pickup 0.2s ease-in-out;
+}
+
+@keyframes pickup {
+    0% {
+        transform: scale(1);
+    }
+    100% {
+        transform: scale(1.05);
+    }
+}
+
+.column.drag-over {
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        background-color: #f8f9fa;
+    }
+    50% {
+        background-color: #e9ecef;
+    }
+    100% {
+        background-color: #f8f9fa;
+    }
+}

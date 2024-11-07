@@ -12,7 +12,13 @@ const firebaseConfig = {
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const dbRef = firebase.database().ref();
+dbRef.child('test').set({
+    timestamp: Date.now(),
+    message: 'Database connection successful'
+})
+.then(() => console.log('Database connected successfully'))
+.catch(error => console.error('Database connection failed:', error));
 
 // Global Variables
 let currentStep = 1;

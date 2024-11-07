@@ -1,117 +1,215 @@
-// ... (keep existing code and modify these functions) ...
+// Conflict resolution and item locking system
+let lockedItems = {};
+let lastSyncTimestamp = Date.now();
+const LOCK_TIMEOUT = 30000; // 30 seconds
 
-function nextStep() {
-    if (currentStep < 4) {
-        const currentStepElement = document.querySelector(`#step${currentStep}`);
-        const nextStepElement = document.querySelector(`#step${currentStep + 1}`);
-        
-        // Animate current step out
-        currentStepElement.classList.add('exit');
-        
-        setTimeout(() => {
-            currentStepElement.classList.remove('active', 'exit');
-            nextStepElement.classList.add('active');
-            
-            // Update step indicators with animation
-            const currentIndicator = document.querySelectorAll('.step-number')[currentStep - 1];
-            const nextIndicator = document.querySelectorAll('.step-number')[currentStep];
-            
-            currentIndicator.classList.remove('active');
-            currentIndicator.classList.add('completed');
-            nextIndicator.classList.add('active');
-            
-            currentStep++;
-            
-            if (currentStep === 4) {
-                setTimeout(() => {
-                    document.querySelector('.matrix-container').classList.add('visible');
-                }, 100);
-                categorizeItems();
-            }
-        }, 400); // Match this with CSS animation duration
-    }
-}
-
-function previousStep() {
-    if (currentStep > 1) {
-        const currentStepElement = document.querySelector(`#step${currentStep}`);
-        const previousStepElement = document.querySelector(`#step${currentStep - 1}`);
-        
-        // Animate current step out
-        currentStepElement.classList.add('exit');
-        
-        setTimeout(() => {
-            currentStepElement.classList.remove('active', 'exit');
-            previousStepElement.classList.add('active');
-            
-            // Update step indicators with animation
-            const currentIndicator = document.querySelectorAll('.step-number')[currentStep - 1];
-            const previousIndicator = document.querySelectorAll('.step-number')[currentStep - 2];
-            
-            currentIndicator.classList.remove('active');
-            previousIndicator.classList.remove('completed');
-            previousIndicator.classList.add('active');
-            
-            currentStep--;
-        }, 400); // Match this with CSS animation duration
-    }
-}
-
-function addItem() {
-    const input = document.getElementById('newItem');
-    const text = input.value.trim();
+// Initialize lock management
+function initializeLockManagement() {
+    const locksRef = ref(db, `sessions/${sessionId}/locks`);
     
-    if (text) {
-        const item = {
-            id: Date.now(),
-            text: text,
-            value: null,
-            effort: null
-        };
-        items.push(item);
-        
-        // Create item with animation
-        const div = document.createElement('div');
-        div.className = 'item';
-        div.textContent = text;
-        div.dataset.id = item.id;
-        div.style.opacity = '0';
-        
-        document.getElementById('itemsList').appendChild(div);
-        // Trigger reflow for animation
-        div.offsetHeight;
-        div.style.opacity = '1';
-        
-        input.value = '';
-        
-        // Clone for other columns
-        const valueClone = div.cloneNode(true);
-        const effortClone = div.cloneNode(true);
-        
-        document.getElementById('unassignedValue').appendChild(valueClone);
-        document.getElementById('unassignedEffort').appendChild(effortClone);
+    // Listen for lock changes
+    onValue(locksRef, (snapshot) => {
+        lockedItems = snapshot.val() || {};
+        updateLockedItemsDisplay();
+    });
+
+    // Clean up expired locks periodically
+    setInterval(cleanExpiredLocks, 5000);
+}
+
+// Lock an item before editing
+async function lockItem(itemId) {
+    const lockRef = ref(db, `sessions/${sessionId}/locks/${itemId}`);
+    const currentTime = Date.now();
+
+    try {
+        // Try to acquire lock using transaction
+        const result = await runTransaction(lockRef, (currentLock) => {
+            if (currentLock === null || 
+                currentLock.timestamp + LOCK_TIMEOUT < currentTime ||
+                currentLock.userId === userId) {
+                return {
+                    userId: userId,
+                    userName: userName,
+                    timestamp: currentTime
+                };
+            }
+            // Abort if locked by someone else
+            return undefined;
+        });
+
+        if (result.committed) {
+            // Lock acquired
+            showNotification(`You've locked "${getItemText(itemId)}" for editing`);
+            return true;
+        } else {
+            // Lock failed
+            const currentLock = result.snapshot.val();
+            showNotification(`Item is being edited by ${currentLock.userName}`);
+            return false;
+        }
+    } catch (error) {
+        console.error('Lock acquisition failed:', error);
+        return false;
     }
 }
 
-// Add this to enhance drag and drop animations
-drake2.on('shadow', (el) => {
-    el.classList.add('is-dragging');
-});
+// Release a lock
+async function unlockItem(itemId) {
+    const lockRef = ref(db, `sessions/${sessionId}/locks/${itemId}`);
+    
+    try {
+        // Only remove if it's our lock
+        await runTransaction(lockRef, (currentLock) => {
+            if (currentLock && currentLock.userId === userId) {
+                return null;
+            }
+            return currentLock;
+        });
+        
+        showNotification(`Released lock on "${getItemText(itemId)}"`);
+    } catch (error) {
+        console.error('Lock release failed:', error);
+    }
+}
 
-drake2.on('dragend', (el) => {
-    el.classList.remove('is-dragging');
-    document.querySelectorAll('.column').forEach(col => {
-        col.classList.remove('drag-over');
+// Clean up expired locks
+async function cleanExpiredLocks() {
+    const locksRef = ref(db, `sessions/${sessionId}/locks`);
+    const currentTime = Date.now();
+
+    try {
+        const snapshot = await get(locksRef);
+        const locks = snapshot.val() || {};
+
+        for (const [itemId, lock] of Object.entries(locks)) {
+            if (lock.timestamp + LOCK_TIMEOUT < currentTime) {
+                // Remove expired lock
+                await set(ref(db, `sessions/${sessionId}/locks/${itemId}`), null);
+            }
+        }
+    } catch (error) {
+        console.error('Lock cleanup failed:', error);
+    }
+}
+
+// Conflict resolution for simultaneous edits
+function resolveConflict(itemId, localChanges, remoteChanges) {
+    const conflictRef = ref(db, `sessions/${sessionId}/conflicts/${itemId}`);
+    
+    // Store both versions
+    set(conflictRef, {
+        local: {
+            userId: userId,
+            userName: userName,
+            changes: localChanges,
+            timestamp: Date.now()
+        },
+        remote: remoteChanges
     });
+
+    // Show conflict resolution dialog
+    showConflictDialog(itemId, localChanges, remoteChanges);
+}
+
+// Update items with conflict checking
+async function updateItem(itemId, newData) {
+    const itemRef = ref(db, `sessions/${sessionId}/items/${itemId}`);
+    
+    try {
+        // Get the latest version first
+        const snapshot = await get(itemRef);
+        const currentData = snapshot.val();
+
+        if (currentData.lastModified > lastSyncTimestamp) {
+            // Conflict detected
+            resolveConflict(itemId, newData, currentData);
+            return false;
+        }
+
+        // No conflict, update the item
+        await set(itemRef, {
+            ...newData,
+            lastModified: Date.now()
+        });
+        
+        lastSyncTimestamp = Date.now();
+        return true;
+    } catch (error) {
+        console.error('Update failed:', error);
+        return false;
+    }
+}
+
+// Modify drag and drop to respect locks
+drake2.on('drag', (el) => {
+    const itemId = el.dataset.id;
+    
+    if (isItemLocked(itemId)) {
+        drake2.cancel(true);
+        showNotification(`Can't move - item is being edited by ${lockedItems[itemId].userName}`);
+    }
 });
 
-drake3.on('shadow', (el) => {
-    el.classList.add('is-dragging');
-});
+// Update UI to show locked items
+function updateLockedItemsDisplay() {
+    document.querySelectorAll('.item').forEach(item => {
+        const itemId = item.dataset.id;
+        const lockInfo = lockedItems[itemId];
+        
+        item.classList.remove('locked', 'locked-by-me');
+        item.querySelector('.lock-indicator')?.remove();
 
-drake3.on('dragend', (el) => {
-    el.classList.remove('is-dragging');
-    document.querySelectorAll('.column').forEach(col => {
-        col.classList.remove('drag-over');
+        if (lockInfo) {
+            const isMyLock = lockInfo.userId === userId;
+            item.classList.add(isMyLock ? 'locked-by-me' : 'locked');
+            
+            const lockIndicator = document.createElement('div');
+            lockIndicator.className = 'lock-indicator';
+            lockIndicator.title = isMyLock ? 
+                'Locked by you' : 
+                `Locked by ${lockInfo.userName}`;
+            
+            item.appendChild(lockIndicator);
+        }
     });
-});
+}
+
+// Add these CSS styles
+const styles = `
+    .item.locked {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .item.locked-by-me {
+        border: 2px solid #4caf50;
+    }
+
+    .lock-indicator {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 16px;
+        height: 16px;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23666" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>');
+    }
+
+    .conflict-dialog {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        z-index: 1000;
+    }
+
+    .conflict-dialog .options {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+`;

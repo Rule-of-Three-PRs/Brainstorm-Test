@@ -1,13 +1,197 @@
-# If you've never used git with GitHub before, first set up your credentials:
-git config --global user.name "Your Name"
-git config --global user.email "your@email.com"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backlog Prioritization Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.3/dragula.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dragula/3.7.3/dragula.min.css"/>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f2f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .brainstorm-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 8px 16px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        .ideas-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            min-height: 50px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .matrix {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .quadrant {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .quadrant h2 {
+            margin-top: 0;
+            color: #333;
+            font-size: 18px;
+        }
+        .item {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 4px;
+            cursor: move;
+            user-select: none;
+        }
+        .item:hover {
+            background: #e9ecef;
+        }
+        .gu-mirror {
+            background: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .export-btn {
+            background: #28a745;
+            margin-top: 20px;
+        }
+        .quadrant-container {
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="brainstorm-section">
+            <h2>Brainstorming Space</h2>
+            <div class="input-group">
+                <input type="text" id="newIdea" placeholder="Add a new backlog item...">
+                <button onclick="addIdea()">Add Item</button>
+            </div>
+            <div id="ideasContainer" class="ideas-container"></div>
+        </div>
+        
+        <div class="matrix">
+            <div class="quadrant">
+                <h2>Quick Wins (High Value, Low Effort)</h2>
+                <div id="quickWins" class="quadrant-container"></div>
+            </div>
+            <div class="quadrant">
+                <h2>Strategic Projects (High Value, High Effort)</h2>
+                <div id="strategic" class="quadrant-container"></div>
+            </div>
+            <div class="quadrant">
+                <h2>Fill-ins (Low Value, Low Effort)</h2>
+                <div id="fillins" class="quadrant-container"></div>
+            </div>
+            <div class="quadrant">
+                <h2>Time Sinks (Low Value, High Effort)</h2>
+                <div id="timeSinks" class="quadrant-container"></div>
+            </div>
+        </div>
+        
+        <button onclick="exportData()" class="export-btn">Export to CSV</button>
+    </div>
 
-# Then, in your terminal/command prompt, navigate to where your HTML file is and:
-git init
-git add prioritization.html
-# Rename it to index.html (GitHub Pages looks for this by default)
-mv prioritization.html index.html
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/backlog-prioritizer.git
-git push -u origin main
+    <script>
+        // Initialize dragula
+        var drake = dragula([
+            document.getElementById('ideasContainer'),
+            document.getElementById('quickWins'),
+            document.getElementById('strategic'),
+            document.getElementById('fillins'),
+            document.getElementById('timeSinks')
+        ]);
+
+        // Add new idea
+        function addIdea() {
+            const input = document.getElementById('newIdea');
+            const text = input.value.trim();
+            
+            if (text) {
+                const item = document.createElement('div');
+                item.className = 'item';
+                item.textContent = text;
+                document.getElementById('ideasContainer').appendChild(item);
+                input.value = '';
+            }
+        }
+
+        // Handle enter key
+        document.getElementById('newIdea').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addIdea();
+            }
+        });
+
+        // Export function
+        function exportData() {
+            let csv = 'Category,Item\n';
+            
+            // Helper function to process each quadrant
+            function processQuadrant(id, name) {
+                const items = document.getElementById(id).getElementsByClassName('item');
+                Array.from(items).forEach(item => {
+                    csv += `"${name}","${item.textContent}"\n`;
+                });
+            }
+            
+            processQuadrant('quickWins', 'Quick Wins');
+            processQuadrant('strategic', 'Strategic Projects');
+            processQuadrant('fillins', 'Fill-ins');
+            processQuadrant('timeSinks', 'Time Sinks');
+            
+            // Create and trigger download
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('hidden', '');
+            a.setAttribute('href', url);
+            a.setAttribute('download', 'backlog-prioritization.csv');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    </script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-database.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Step-by-Step Backlog Prioritization</title>
@@ -10,6 +12,17 @@
 </head>
 <body>
     <div class="container">
+<div class="collaboration-header">
+    <div class="session-info">
+        <span>Session ID: <strong id="sessionId"></strong></span>
+        <button onclick="copySessionLink()" class="copy-link-btn">
+            Copy Session Link
+        </button>
+    </div>
+    <div class="active-users" id="activeUsers">
+        <!-- Active users will appear here -->
+    </div>
+</div>
         <div class="step-indicator">
             <div class="step-number active">1. Brainstorm</div>
             <div class="step-number">2. Business Value</div>

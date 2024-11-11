@@ -190,7 +190,7 @@ button:hover {
 
 /* Items */
 .items-list {
-    min-height: 50px;
+    min-height: 100%;
 }
 
 .item {
